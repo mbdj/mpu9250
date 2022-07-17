@@ -1,8 +1,7 @@
-
 --
--- Mehdi 15/07/2022 --
+-- Mehdi Ben Djedidia 15/07/2022 --
 --
--- Mise en oeuvre du giroscope mpu-9255
+-- Démo du gyroscope mpu-9250
 -- et d'un écran oled sh1106
 --
 
@@ -11,8 +10,6 @@ pragma Unreferenced (Last_Chance_Handler);
 --  The "last chance handler" is the user-defined routine that is called when
 --  an exception is propagated. We need it in the executable, therefore it
 --  must be somewhere in the closure of the context clauses.
-
-
 
 with STM32.Board; use STM32.Board;
 with STM32.Setup;
@@ -32,11 +29,8 @@ with Bitmapped_Drawing;
 with BMP_Fonts;
 with Interfaces; use Interfaces;
 
-
 procedure Main is
--- pragma Priority (System.Priority'First);
-
-	Period : constant Time_Span := Milliseconds (200);
+	Period       : constant Time_Span := Milliseconds (200);
 	Next_Release : Time := Clock;
 
 	Oled1106    : SH1106_Screen (Buffer_Size_In_Byte => (128 * 64) / 8,
@@ -54,6 +48,9 @@ procedure Main is
 	Acc_X, Acc_Y, Acc_Z    : Integer_16;
 	Gyro_X, Gyro_Y, Gyro_Z : Integer_16;
 
+	Angle_X, Angle_Y       : Float;
+
+	Degre                  : constant := 180.0 / 3.1415; -- pour la conversion de rd en degré
 
 begin
 
@@ -62,11 +59,11 @@ begin
 	STM32.Board.Turn_On (Green_LED);
 
 	-- initialisation du port I2C 1 pour l'écran oled sh1106 en i2c
-	STM32.Setup.Setup_I2C_Master  (Port => I2C_1,
-										  SDA => PB9,
-										  SCL => PB8,
-										  SDA_AF => GPIO_AF_I2C1_4,
-										  SCL_AF => GPIO_AF_I2C1_4,
+	STM32.Setup.Setup_I2C_Master  (Port        => I2C_1,
+										  SDA         => PB9,
+										  SCL         => PB8,
+										  SDA_AF      => GPIO_AF_I2C1_4,
+										  SCL_AF      => GPIO_AF_I2C1_4,
 										  Clock_Speed => 100_000); -- 100 KHz
 
 	-- initialisation de l'oled sh1106
@@ -79,11 +76,11 @@ begin
 	Oled1106.Hidden_Buffer.Fill;
 
 	-- initialisation du port I2C 2 pour l'accès au MPU92XX en i2c
-	STM32.Setup.Setup_I2C_Master  (Port => I2C_2,
-										  SDA => PB3,
-										  SCL => PB10,
-										  SDA_AF => GPIO_AF_I2C2_4,
-										  SCL_AF => GPIO_AF_I2C2_4,
+	STM32.Setup.Setup_I2C_Master  (Port        => I2C_2,
+										  SDA         => PB3,
+										  SCL         => PB10,
+										  SDA_AF      => GPIO_AF_I2C2_4,
+										  SCL_AF      => GPIO_AF_I2C2_4,
 										  Clock_Speed => 400_000); -- Le MPU9250 peut échanger à 400 KHz
 
 	-- initialisation du MPU92XX
@@ -128,6 +125,13 @@ begin
 	loop
 		STM32.Board.Toggle (Green_LED);
 
+
+		-- effacer la zone des coordonnées avant un nouvel affichage
+		Oled1106.Hidden_Buffer.Set_Source (HAL.Bitmap.Black);
+		Oled1106.Hidden_Buffer.Fill_Rect (Area => (Position => (0, 20),
+															Width    => 128,
+															Height   => 40));
+
 		MPU92XX_Get_Motion_6 (Device => Gyro,
 								Acc_X  => Acc_X,
 								Acc_Y  => Acc_Y,
@@ -136,58 +140,79 @@ begin
 								Gyro_Y => Gyro_Y,
 								Gyro_Z => Gyro_Z);
 
-		-- effacer la zone des coordonnées avant un nouvel affichage
-		Oled1106.Hidden_Buffer.Set_Source (HAL.Bitmap.Black);
-		Oled1106.Hidden_Buffer.Fill_Rect (Area => (Position => (0, 20),
-															Width    => 128,
-															Height   => 40));
+		Compute_Angles (Acc_X   => Float (Acc_X),
+						Acc_Y   => Float (Acc_Y),
+						Acc_Z   => Float (Acc_Z),
+						Angle_X => Angle_X,
+						Angle_Y => Angle_Y);
+
+		-- conversion en degrés
+		Angle_X := @ * Degre;
+		Angle_Y := @ * Degre;
 
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 20),
-											Msg        => Acc_X'Image,
+											Msg        =>	 "X" & Angle_X'Image,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
+
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 30),
-											Msg        => Acc_Y'Image,
-											Font       => BMP_Fonts.Font8x8,
-											Foreground => HAL.Bitmap.White,
-											Background => HAL.Bitmap.Black);
-		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
-											Start      => (0, 40),
-											Msg        => Acc_Z'Image,
+											Msg        => "Y" & Angle_Y'Image,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
 
-		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
-											Start      => (50, 20),
-											Msg        => Gyro_X'Image,
-											Font       => BMP_Fonts.Font8x8,
-											Foreground => HAL.Bitmap.White,
-											Background => HAL.Bitmap.Black);
-		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
-											Start      => (50, 30),
-											Msg        => Gyro_Y'Image,
-											Font       => BMP_Fonts.Font8x8,
-											Foreground => HAL.Bitmap.White,
-											Background => HAL.Bitmap.Black);
-		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
-											Start      => (50, 40),
-											Msg        => Gyro_Z'Image,
-											Font       => BMP_Fonts.Font8x8,
-											Foreground => HAL.Bitmap.White,
-											Background => HAL.Bitmap.Black);
+
+
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (0, 20),
+		--  									Msg        => Acc_X'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (0, 30),
+		--  									Msg        => Acc_Y'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (0, 40),
+		--  									Msg        => Acc_Z'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
+		--
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (50, 20),
+		--  									Msg        => Gyro_X'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (50, 30),
+		--  									Msg        => Gyro_Y'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
+		--  Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
+		--  									Start      => (50, 40),
+		--  									Msg        => Gyro_Z'Image,
+		--  									Font       => BMP_Fonts.Font8x8,
+		--  									Foreground => HAL.Bitmap.White,
+		--  									Background => HAL.Bitmap.Black);
 
 		-- afficher la température
-
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 50),
-											Msg        => "TEMP" & Integer (MPU92XX_Get_Temperature (Gyro))'Img,
+											Msg        => "TEMP" & MPU92XX_Get_Temperature (Gyro)'Img,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
+
+
 
 		-- mise à jour de l'affichage
 		Oled1106.Update_Layer;
