@@ -52,6 +52,13 @@ procedure Main is
 
 	Degre                  : constant := 180.0 / 3.1415; -- pour la conversion de rd en degré
 
+
+	-- le profil Ravenscar ne permet pas l'utilisation de Float_IO
+	-- mais on peut utiliser 'Img sur un type fixed point
+	-- cf https://github.com/AdaCore/Ada_Drivers_Library/issues/294
+	type Fixed_Type_Affichage is delta 0.1 digits 10;
+	Angle_X_Fixed, Angle_Y_Fixed, Temp_Fixed : Fixed_Type_Affichage;
+
 begin
 
 	-- initialiser la led utilisateur verte
@@ -146,20 +153,20 @@ begin
 						Angle_X => Angle_X,
 						Angle_Y => Angle_Y);
 
-		-- conversion en degrés
-		Angle_X := @ * Degre;
-		Angle_Y := @ * Degre;
+		-- conversion en degrés et en fixed point type pour l'affichage
+		Angle_X_Fixed := Fixed_Type_Affichage ( Angle_X * Degre);
+		Angle_Y_Fixed := Fixed_Type_Affichage (Angle_Y * Degre);
 
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 20),
-											Msg        =>	 "X" & Angle_X'Image,
+											Msg        =>	 "X" & Angle_X_Fixed'Image,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
 
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 30),
-											Msg        => "Y" & Angle_Y'Image,
+											Msg        => "Y" & Angle_Y_Fixed'Image,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
@@ -205,9 +212,10 @@ begin
 		--  									Background => HAL.Bitmap.Black);
 
 		-- afficher la température
+		Temp_Fixed := Fixed_Type_Affichage ( MPU92XX_Get_Temperature (Gyro));
 		Bitmapped_Drawing.Draw_String (Oled1106.Hidden_Buffer.all,
 											Start      => (0, 50),
-											Msg        => "TEMP" & MPU92XX_Get_Temperature (Gyro)'Img,
+											Msg        => "TEMP" & Temp_Fixed'Img,
 											Font       => BMP_Fonts.Font8x8,
 											Foreground => HAL.Bitmap.White,
 											Background => HAL.Bitmap.Black);
